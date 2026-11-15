@@ -1,0 +1,271 @@
+{
+  "title": "ancient temple lotus pond sunset egrets huge banyan tree left",
+  "seed": 7,
+  "light": {
+    "dir": [
+      -0.75,
+      -0.45,
+      0.5
+    ],
+    "color": "#ffd9a0",
+    "ambient": 0.3
+  },
+  "haze": {
+    "color": "#e9c9a6",
+    "amount": 0.75
+  },
+  "focus": [
+    0.35,
+    0.6
+  ],
+  "elements": [
+    {
+      "type": "sky",
+      "stops": [
+        [
+          0,
+          [
+            93,
+            127,
+            166
+          ]
+        ],
+        [
+          0.36,
+          [
+            201,
+            169,
+            143
+          ]
+        ],
+        [
+          0.6,
+          [
+            242,
+            197,
+            142
+          ]
+        ]
+      ],
+      "sun": {
+        "x": 0.2,
+        "y": 0.48,
+        "r": 0.035,
+        "glow": "#ffcf86",
+        "glowSize": 0.3
+      }
+    },
+    {
+      "type": "clouds",
+      "y0": 0.03,
+      "y1": 0.5,
+      "coverage": 0.38,
+      "color": "#fbe7cf",
+      "shadow": "#9b8fa5",
+      "depth": 0.25,
+      "seed": 54
+    },
+    {
+      "type": "terrain",
+      "kind": "hill",
+      "y": 0.585,
+      "amp": 0.05726434550248087,
+      "color": [
+        126,
+        127,
+        89
+      ],
+      "depth": 0.4,
+      "seed": 96
+    },
+    {
+      "type": "terrain",
+      "kind": "ground",
+      "y": 0.6,
+      "amp": 0.012,
+      "color": [
+        139,
+        141,
+        73
+      ],
+      "bottom": 0.64,
+      "seed": 2
+    },
+    {
+      "type": "forest",
+      "x0": 0,
+      "x1": 1,
+      "y": 0.602,
+      "y1": 0.612,
+      "count": 14,
+      "size": [
+        0.06,
+        0.12
+      ],
+      "kinds": [
+        "broadleaf",
+        "palm"
+      ],
+      "leaf": [
+        97,
+        127,
+        64
+      ],
+      "trunk": [
+        108,
+        77,
+        56
+      ],
+      "depth": 0.35,
+      "seed": 675
+    },
+    {
+      "type": "building",
+      "x": 0.3,
+      "y": 0.612,
+      "w": 0.15,
+      "h": 0.11249999999999999,
+      "roof": "shikhara",
+      "color": [
+        191,
+        155,
+        117
+      ],
+      "roofColor": [
+        187,
+        141,
+        95
+      ],
+      "door": true
+    },
+    {
+      "type": "building",
+      "x": 0.4053370786516854,
+      "y": 0.612,
+      "w": 0.09,
+      "h": 0.075,
+      "roof": "flat",
+      "color": [
+        191,
+        155,
+        117
+      ],
+      "door": true
+    },
+    {
+      "type": "water",
+      "y": 0.635,
+      "color": [
+        125,
+        138,
+        142
+      ],
+      "deep": [
+        83,
+        97,
+        101
+      ],
+      "reflect": 0.75,
+      "ripple": 1,
+      "bottom": 1
+    },
+    {
+      "type": "lotus",
+      "x0": 0.05,
+      "x1": 0.95,
+      "y0": 0.6950000000000001,
+      "y1": 0.86,
+      "count": 26,
+      "color": [
+        230,
+        141,
+        158
+      ],
+      "pad": [
+        97,
+        116,
+        63
+      ],
+      "seed": 3
+    },
+    {
+      "type": "terrain",
+      "kind": "ground",
+      "y": 0.87,
+      "amp": 0.025,
+      "color": [
+        139,
+        121,
+        70
+      ],
+      "seed": 6
+    },
+    {
+      "type": "tree",
+      "x": 0.13216292134831462,
+      "y": 0.93,
+      "size": 0.65,
+      "kind": "banyan",
+      "leaf": [
+        97,
+        127,
+        64
+      ],
+      "trunk": [
+        108,
+        77,
+        56
+      ],
+      "seed": 895979
+    },
+    {
+      "type": "grass",
+      "x0": 0,
+      "x1": 1,
+      "y0": 0.86,
+      "y1": 1,
+      "height": 0.05,
+      "density": 0.8,
+      "color": [
+        126,
+        129,
+        63
+      ],
+      "color2": [
+        188,
+        156,
+        86
+      ],
+      "flowers": [
+        "#e07a5f",
+        "#f2cc8f"
+      ],
+      "seed": 9
+    },
+    {
+      "type": "birds",
+      "x0": 0.2,
+      "x1": 0.65,
+      "y0": 0.12,
+      "y1": 0.42,
+      "count": 9,
+      "size": 0.022,
+      "color": "#f6f1e6",
+      "depth": 0.1,
+      "seed": 59
+    }
+  ],
+  "understood": [
+    "ancient",
+    "temple",
+    "lotus",
+    "pond",
+    "sunset",
+    "egrets",
+    "huge",
+    "banyan",
+    "tree",
+    "left"
+  ],
+  "ignored": []
+}

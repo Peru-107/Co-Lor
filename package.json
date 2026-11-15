@@ -1,0 +1,24 @@
+{
+  "name": "dry-media-painter",
+  "version": "0.1.0",
+  "description": "Text to painting in pure code: procedural scenes painted stroke by stroke with simulated dry media. No AI.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "paint": "tsx scene.mts",
+    "photo": "tsx cli.mts",
+    "build": "node build.mjs",
+    "check": "tsc -p ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
