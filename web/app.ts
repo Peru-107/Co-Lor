@@ -56,7 +56,8 @@ function setMode(m: 'text' | 'photo') {
   viewBtns.under.textContent = m === 'text' ? 'Scene' : 'Original';
 }
 
-function chips(el: HTMLElement, words: string[], empty: string) {
+function chips(el: HTMLElement, all: string[], empty: string, max = 30) {
+  const words = all.length > max ? [...all.slice(0, max), '+' + (all.length - max) + ' more'] : all;
   el.replaceChildren(...(words.length ? words.map((w) => Object.assign(document.createElement('span'), { className: 'chip', textContent: w })) : [Object.assign(document.createElement('span'), { className: 'none', textContent: empty })]));
 }
 

@@ -55,17 +55,39 @@ parser saved. Positions: `x` is a fraction of width, `y` of height; sizes are fr
 0 = near, 1 = far. Elements: `sky`, `clouds`, `terrain` (mountain, hill, dune, ground), `water`, `mist`, `tree`
 (broadleaf, banyan, pine, cypress, palm, bare), `forest`, `grass`, `building` (flat, gable, dome, shikhara),
 `figure`, `animal` (elephant, cow, deer, horse, dog, goat), `boat`, `birds`, `lotus`, `lamps`, `rain`,
-`snowfall`, `glow`, `polygon`, `blob` (sculpt anything from capsules and ellipses), and `custom` (your own code).
+`snowfall`, `glow`, `polygon`, `blob` (sculpt anything from capsules and ellipses), `library` (any object from the library, below),
+`studio` (photo backdrop and glossy floor), `road`, `reflect` (mirrors one element in the floor or water) and `custom` (your own code).
 
 ## Media
 
 `pastel` (default), `charcoal`, `gouache`, `impressionist`. Each is a set of numbers in `src/presets.ts`:
 brush sizes per pass, how faithful each pass is, grain, streaks, taper, wobble, contours, hatching, grade.
 
-## Teach it new words
+## The object library
 
-Add an entry to `VOCAB` in `src/scene/parse.ts` and, if it's a new kind of thing, an element in
-`src/scene/elements.ts`. That's the whole extension model.
+Anything with real structure is a *library entry* in `src/library/`: its trigger words, how to read options from your
+sentence, where it likes to stand, and the code that draws it. Right now: **supercar** (side-view wedge profile with
+wheel arches cut from the body, gloss paint bands, glass, side intake, spoked wheels over ventilated discs and calipers,
+no badges), **lighthouse** (banded tower, gallery, glowing lantern at night, keeper's cottage, reflected in the water),
+and **windmill** (tower, cap, lattice sails).
+
+```bash
+npm run paint -- --text "a red supercar with yellow brake calipers in a studio" car.png
+npm run paint -- --text "a yellow sports car on a mountain road at sunset" road.png
+npm run paint -- --text-file notes/ferrari-spec.txt ferrari.png        # a whole paragraph of description
+npm run paint -- scenes/supercar-studio.ts car.png                       # a hand-written scene using the library
+```
+
+Colour words attach to the thing they describe: in "bright yellow brake calipers" the yellow goes to the calipers and
+the paint colour is whatever the rest of the text votes for. Words that only name a part of an object ("prancing horse"
+badge, "bumper", "tyre") are absorbed by it instead of turning into a horse.
+
+## Teach it new things
+
+1. **A new object:** copy `src/library/windmill.ts`, change the drawing, and add it to `ENTRIES` in `src/library/index.ts`.
+   The parser, scene files and the web app pick up its words automatically. The engine never changes.
+2. **A new word** for something that already exists: add it to `VOCAB` in `src/scene/parse.ts`.
+3. **A new kind of scenery** (not an object): add an element in `src/scene/elements.ts`.
 
 ## Credits
 

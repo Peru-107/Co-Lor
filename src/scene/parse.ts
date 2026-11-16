@@ -3,6 +3,7 @@
  * (horizon, layering back to front, rule-of-thirds placement, colours keyed to time of day and weather).
  */
 import { createRng, Rng } from '../core/rng';
+import { ENTRIES, LIBRARY } from '../library';
 import { mix, rgb, type Color } from './ref';
 import type { AnimalKind, Scene, SceneElement, TreeKind } from './types';
 
@@ -12,7 +13,7 @@ type Weather = 'clear' | 'cloudy' | 'overcast' | 'mist' | 'rain' | 'snow';
 type Concept =
   | ['time', Time] | ['weather', Weather] | ['setting', string] | ['building', string] | ['tree', TreeKind | 'tree' | 'bare']
   | ['animal', AnimalKind | 'bull'] | ['bird', string] | ['person', string] | ['pose', 'walk' | 'sit' | 'stand' | 'graze'] | ['boat', string]
-  | ['detail', string] | ['medium', string] | ['color', string] | ['size', number] | ['place', string] | ['count', number] | ['season', string] | ['mood', string];
+  | ['object', string] | ['detail', string] | ['medium', string] | ['color', string] | ['size', number] | ['place', string] | ['count', number] | ['season', string] | ['mood', string];
 
 const W = (words: string, c: Concept): Array<[string, Concept]> => words.split(/\s+/).map((w) => [w, c]);
 const VOCAB = new Map<string, Concept>([
@@ -38,6 +39,9 @@ const VOCAB = new Map<string, Concept>([
   ...W('forest jungle wood woods woodland grove', ['setting', 'forest']),
   ...W('field meadow farm paddy grassland countryside', ['setting', 'field']),
   ...W('garden park', ['setting', 'garden']),
+  ...W('studio showroom backdrop photoshoot', ['setting', 'studio']),
+  ...W('road highway racetrack asphalt tarmac', ['setting', 'road']),
+  ...ENTRIES.flatMap((e) => W(e.words.join(' '), ['object', e.name])),
   ...W('temple shrine mandir', ['building', 'temple']),
   ...W('palace mosque taj mahal dome tomb', ['building', 'palace']),
   ...W('house home cottage hut cabin farmhouse', ['building', 'house']),
@@ -107,7 +111,11 @@ export interface ParsedScene extends Scene { understood: string[]; ignored: stri
 
 export function textToScene(text: string, seed = 7): ParsedScene {
   const rng = createRng(seed * 7919 + text.length);
-  const lower = text.toLowerCase().replace(/golden hour/g, 'golden').replace(/blue hour/g, 'dusk').replace(/fishing boat/g, 'boat');
+  let lower = text.toLowerCase().replace(/golden hour/g, 'golden').replace(/blue hour/g, 'dusk').replace(/fishing boat/g, 'boat');
+  for (const e of ENTRIES) for (const ph of e.phrases ?? []) lower = lower.split(ph).join(e.words[0]);
+  // Words that only describe a part of an object ("prancing horse" badge on a car) never become objects of their own.
+  const present = ENTRIES.filter((e) => e.words.some((w) => new RegExp('\\b' + w + 's?\\b').test(lower)));
+  const absorbed = new Set(present.flatMap((e) => e.absorbs ?? []));
   const clauses = lower.split(/[,.;!]|\band\b|\bwith\b|\bwhile\b/).map((c) => c.split(/[^a-z]+/).filter(Boolean));
   const understood = new Set<string>();
   const ignored = new Set<string>();
@@ -116,12 +124,14 @@ export function textToScene(text: string, seed = 7): ParsedScene {
   let order = 0;
 
   for (const words of clauses) {
-    let pendingCount: number | undefined, pendingColor: string | undefined, pendingSize = 1;
+    let pendingCount: number | undefined, pendingColor: string | undefined, pendingSize = 1, countAt = -9, wi = -1;
     let clausePlace: string | undefined, clausePose: string | undefined;
     const clauseMentions: Mention[] = [];
     for (const w of words) {
-      if (w in NUM) { pendingCount = NUM[w]; if (w !== 'a' && w !== 'an') understood.add(w); continue; }
-      if (/^\d+$/.test(w)) { pendingCount = Math.min(30, Number(w)); understood.add(w); continue; }
+      wi++;
+      if (absorbed.has(w) || absorbed.has(w.replace(/s$/, ''))) { understood.add(w); pendingColor = undefined; continue; }
+      if (w in NUM) { countAt = wi; pendingCount = NUM[w]; if (w !== 'a' && w !== 'an') understood.add(w); continue; }
+      if (/^\d+$/.test(w)) { countAt = wi; pendingCount = Math.min(30, Number(w)); understood.add(w); continue; }
       const c = lookup(w);
       if (!c) { if (!STOP.has(w) && w.length > 2) ignored.add(w); continue; }
       understood.add(w);
@@ -142,7 +152,9 @@ export function textToScene(text: string, seed = 7): ParsedScene {
       }
       else {
         const plural = /s$/.test(w) && !/ss$/.test(w) || ['people', 'men', 'women', 'children', 'crowd', 'flock', 'sheep', 'deer'].includes(w);
-        const count = pendingCount ?? (plural ? (k === 'bird' ? 9 : k === 'person' ? 3 : 3) : 1);
+        // A number only belongs to an object if it sits right before it ("two-door ... sports car" is not two cars).
+        const near = pendingCount !== undefined && (k !== 'object' || wi - countAt <= 3);
+        const count = near ? pendingCount! : k === 'object' ? (plural ? LIBRARY[v as string].placement.plural ?? 3 : 1) : plural ? (k === 'bird' ? 9 : 3) : 1;
         const m: Mention = { kind: k, value: v, count: v === 'crowd' ? Math.max(count, 7) : count, plural, color: pendingColor, size: pendingSize, word: w, order: order++ };
         mentions.push(m); clauseMentions.push(m);
         pendingCount = undefined; pendingColor = undefined; pendingSize = 1;
@@ -156,6 +168,22 @@ export function textToScene(text: string, seed = 7): ParsedScene {
     }
   }
 
+  // An object mentioned again later is the same object: keep one group per entry.
+  const seen = new Map<string, Mention>();
+  for (const m of [...mentions]) {
+    if (m.kind !== 'object') continue;
+    const first = seen.get(m.value);
+    if (!first) { seen.set(m.value, m); continue; }
+    first.count = Math.max(first.count, m.count);
+    mentions.splice(mentions.indexOf(m), 1);
+  }
+  // Objects with a natural home bring their setting along unless the text names one.
+  for (const m of mentions.filter((x) => x.kind === 'object')) {
+    const pref = LIBRARY[m.value].placement.prefers[0];
+    if (pref === 'road' && !flags.settings.has('studio')) flags.settings.add('road');
+    if (pref === 'studio' && !flags.settings.has('road')) flags.settings.add('studio');
+    if (pref === 'water' && !['sea', 'lake', 'river'].some((k) => flags.settings.has(k))) flags.settings.add('sea');
+  }
   // Merge a "dead/bare" mention into the tree it describes.
   const trees = mentions.filter((m) => m.kind === 'tree');
   if (trees.some((t) => t.value === 'bare')) {
@@ -166,12 +194,12 @@ export function textToScene(text: string, seed = 7): ParsedScene {
   if (flags.settings.has('beach')) flags.settings.add('sea');
   if (flags.weather.has('snow') && !flags.time) flags.time = 'day';
 
-  return compose({ mentions, ...flags }, rng, [...understood], [...ignored], seed);
+  return compose({ mentions, ...flags, text: lower }, rng, [...understood], [...ignored], seed);
 }
 
 // ---------------------------------------------------------------- composition
 
-interface Plan { mentions: Mention[]; time?: Time; weather: Set<Weather>; settings: Set<string>; details: Set<string>; medium?: string; season?: string; old: boolean }
+interface Plan { text: string; mentions: Mention[]; time?: Time; weather: Set<Weather>; settings: Set<string>; details: Set<string>; medium?: string; season?: string; old: boolean }
 
 const SKY: Record<Time, Array<[number, string]>> = {
   dawn: [[0, '#6d7fa8'], [0.6, '#d3a9aa'], [1, '#f6d5a8']],
@@ -187,6 +215,7 @@ function compose(p: Plan, rng: Rng, understood: string[], ignored: string[], see
   const rainy = wx.has('rain'), snowy = wx.has('snow'), misty = wx.has('mist') || p.settings.has('valley');
   const grey = rainy || wx.has('overcast');
   const S = p.settings;
+  if (S.has('studio') && p.mentions.some((m) => m.kind === 'object')) return composeStudio(p, rng, understood, ignored, seed);
   const sea = S.has('sea'), lake = S.has('lake'), river = S.has('river'), desert = S.has('desert');
   const water = sea || lake || river;
   const mountains = S.has('mountain') || S.has('valley') || (snowy && !sea && rng() < 0.7);
@@ -324,6 +353,42 @@ function compose(p: Plan, rng: Rng, understood: string[], ignored: string[], see
   if (water && (!sea || S.has('beach'))) els.push({ type: 'terrain', kind: 'ground', y: fgY, amp: 0.025, color: tint(sea ? '#d9c49a' : desert ? '#d8ae74' : snowy ? '#e6eaf0' : '#7d7442'), seed: 6 });
   const hasFg = !sea || S.has('beach');
 
+  // --- library objects (cars on a road, lighthouses on rocks in the water, windmills in fields...)
+  const road = S.has('road');
+  if (road) els.push({ type: 'road', y0: H + 0.1, y1: H + 0.33, color: tint('#4a4b50') });
+  let objFocus: number | undefined;
+  for (const m of p.mentions.filter((x) => x.kind === 'object')) {
+    const ent = LIBRARY[m.value];
+    const pref = ent.placement.prefers[0];
+    const n = Math.min(m.count, 6);
+    const wy = sea ? H : H + 0.035;
+    const options = { ...ent.extract?.(p.text), time, lit };
+    for (let c = 0; c < n; c++) {
+      const spread = n === 1 ? undefined : 0.18 + (0.64 * c) / (n - 1);
+      let x: number, y: number, size = ent.placement.size * m.size, depth = 0;
+      if (pref === 'road') {
+        x = spread ?? (m.place === 'left' ? 0.3 : m.place === 'right' ? 0.7 : 0.5);
+        y = Math.min(0.93, H + 0.2 + c * 0.04);
+        size *= n === 1 ? 1 : 0.85 + (0.15 * c) / (n - 1);
+      } else if (pref === 'water') {
+        x = spread ?? (m.place === 'left' ? 0.25 : m.place === 'right' ? 0.72 : sunRight ? 0.3 : 0.7);
+        y = wy + 0.07 + c * 0.02;
+        size *= 1 - 0.15 * c;
+        depth = 0.1 + 0.1 * c;
+      } else {
+        x = spread ?? (m.place === 'left' ? 0.25 : m.place === 'right' ? 0.72 : m === subject ? thirds + 0.1 : 0.5);
+        y = H + 0.13 + (c % 2) * 0.02;
+        size *= 1 - 0.14 * c;
+        depth = 0.15 + 0.08 * c;
+      }
+      size = Math.min(size, (y - 0.06) / ent.placement.height); // keep the top of it inside the picture
+      const facing: 1 | -1 = pref === 'road' ? (n === 1 ? (rng() < 0.5 ? 1 : -1) : c % 2 ? -1 : 1) : x < 0.5 ? -1 : 1;
+      els.push({ type: 'library', name: ent.name, x, y, size, facing, depth, options });
+      if (pref === 'water' || (pref === 'road' && rainy)) els.push({ type: 'reflect', of: els.length - 1, y, strength: pref === 'water' ? 0.45 : 0.3, length: pref === 'water' ? 0.25 : 0.1 });
+      if (objFocus === undefined && m === subject) objFocus = x;
+    }
+  }
+
   // --- trees, animals, people in the foreground
   const usedFg: Array<[number, number]> = [];
   const fgItems: Array<{ y: number; el: SceneElement }> = [];
@@ -341,7 +406,7 @@ function compose(p: Plan, rng: Rng, understood: string[], ignored: string[], see
       fgItems.push({ y: 0.93 + c * 0.005, el: { type: 'tree', x: cx, y: hasFg ? 0.93 : 0.99, size, kind, leaf: tint(m.color ?? leaf), trunk: tint('#5a4232'), seed: Math.floor(rng() * 1e6) } });
     }
   }
-  if (!treeMentions.length && hasFg && !S.has('city') && !desert && rng() < 0.55) {
+  if (!treeMentions.length && hasFg && !S.has('city') && !desert && !p.mentions.some((m) => m.kind === 'object') && rng() < 0.55) {
     const kind: TreeKind = snowy || mountains ? 'pine' : S.has('beach') ? 'palm' : 'broadleaf';
     const x = pickX(sunRight ? 'left' : 'right', 0.18, usedFg, 0.05);
     fgItems.push({ y: 0.94, el: { type: 'tree', x: x + 0.09, y: 0.94, size: 0.55, kind, leaf: tint(leaf), trunk: tint('#5a4232'), seed: Math.floor(rng() * 1e6) } });
@@ -369,7 +434,7 @@ function compose(p: Plan, rng: Rng, understood: string[], ignored: string[], see
   }
   fgItems.sort((a, b) => a.y - b.y);
 
-  if (hasFg && !desert && !snowy && !S.has('city') && !(sea && !S.has('beach'))) {
+  if (hasFg && !desert && !snowy && !road && !S.has('city') && !(sea && !S.has('beach'))) {
     const flowers = p.details.has('flowers') || p.season === 'spring' || S.has('garden') ? ['#e07a5f', '#f2cc8f', '#e58aa6', '#f4f1de'] : ['#e07a5f', '#f2cc8f'];
     els.push(...fgItems.filter((f) => f.el.type === 'tree').map((f) => f.el));
     els.push({ type: 'grass', x0: 0, x1: 1, y0: fgY - 0.01, y1: 1, height: 0.05, density: p.details.has('grass') || S.has('field') ? 1.4 : 0.8, color: tint(p.season === 'autumn' ? '#a08a3a' : '#6f7d3a'), color2: tint('#b59c55'), flowers, seed: 9 });
@@ -408,7 +473,35 @@ function compose(p: Plan, rng: Rng, understood: string[], ignored: string[], see
     medium: p.medium,
     light,
     haze: { color: grey ? '#9aa0a8' : hazeC, amount: grey ? 0.85 : 0.75 },
-    focus: [Math.max(0.15, Math.min(0.85, focusX)), H],
+    focus: [Math.max(0.15, Math.min(0.85, objFocus ?? focusX)), road ? H + 0.2 : H],
+    elements: els,
+    understood,
+    ignored,
+  };
+}
+
+/** Studio setting: an object (or a few) on a polished floor in front of a curved backdrop, lit by a softbox. */
+function composeStudio(p: Plan, rng: Rng, understood: string[], ignored: string[], seed: number): ParsedScene {
+  const els: SceneElement[] = [{ type: 'studio', y: 0.64 }];
+  for (const m of p.mentions.filter((x) => x.kind === 'object')) {
+    const ent = LIBRARY[m.value];
+    const n = Math.min(m.count, 4);
+    const options = { ...ent.extract?.(p.text), time: 'day', lit: false };
+    for (let c = 0; c < n; c++) {
+      const x = n === 1 ? (m.place === 'left' ? 0.35 : m.place === 'right' ? 0.65 : 0.5) : 0.28 + (0.44 * c) / (n - 1);
+      const y = n === 1 ? 0.8 : 0.78 + (c % 2) * 0.06;
+      const size = Math.min(ent.placement.size * m.size * 1.35 * (n > 1 ? 0.66 : 1), (y - 0.1) / ent.placement.height);
+      els.push({ type: 'library', name: ent.name, x, y, size, facing: n === 1 ? 1 : rng() < 0.5 ? 1 : -1, options });
+      els.push({ type: 'reflect', of: els.length - 1, y, strength: 0.5, length: 0.14 });
+    }
+  }
+  return {
+    title: understood.join(' '),
+    seed,
+    medium: p.medium,
+    light: { dir: [-0.5, -0.75, 0.6], color: '#fff8ee', ambient: 0.35 },
+    haze: { color: '#9aa3ad', amount: 0 },
+    focus: [0.5, 0.66],
     elements: els,
     understood,
     ignored,

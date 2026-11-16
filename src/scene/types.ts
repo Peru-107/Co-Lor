@@ -51,5 +51,13 @@ export type SceneElement =
   | { type: 'snowfall'; density?: number; color?: Color }
   | { type: 'lotus'; x0: number; x1: number; y0: number; y1: number; count: number; color?: Color; pad?: Color; seed?: number }
   | { type: 'lamps'; points: Array<[number, number]>; color?: Color; size?: number }
+  /** Any object from src/library (supercar, lighthouse, windmill...). x,y = centre of its base; size = its main dimension. */
+  | { type: 'library'; name: string; x: number; y: number; size: number; facing?: 1 | -1; depth?: number; options?: Record<string, any> }
+  /** Photo-studio backdrop: curved wall, glossy floor from y down, softbox glow. */
+  | { type: 'studio'; y: number; color?: Color; floor?: Color; glow?: Color }
+  /** Asphalt band seen from the side with edge lines and a dashed centre line. */
+  | { type: 'road'; y0: number; y1: number; color?: Color; line?: Color }
+  /** Mirrors only the pixels element number `of` drew, below the line y (a polished floor or wet road). */
+  | { type: 'reflect'; of: number; y: number; strength?: number; length?: number }
   /** Escape hatch for hand-written code (TypeScript scenes only, never from JSON). */
   | { type: 'custom'; draw: (ref: Ref) => void };

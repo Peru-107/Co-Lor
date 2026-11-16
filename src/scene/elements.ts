@@ -1,12 +1,14 @@
 import { RGB } from '../core/paper';
 import { clamp, createRng, hash2D, lerp, noise2D, Rng, smoothstep } from '../core/rng';
 import { mix, Ref, rgb, scaleRGB } from './ref';
+import { drawLibrary } from '../library';
+import { reflect, road, studio } from './staging';
 import type { Part, SceneElement, Texture, TreeKind } from './types';
 
 type El<T extends SceneElement['type']> = Extract<SceneElement, { type: T }>;
 
-const shade = (c: RGB, k: number, cool = 0): RGB => [c[0] * k * (1 - cool * 0.4), c[1] * k * (1 - cool * 0.15), c[2] * k * (1 + cool * 0.25)];
-const lighten = (c: RGB, k: number): RGB => mix(c, [255, 248, 230], k);
+export const shade = (c: RGB, k: number, cool = 0): RGB => [c[0] * k * (1 - cool * 0.4), c[1] * k * (1 - cool * 0.15), c[2] * k * (1 + cool * 0.25)];
+export const lighten = (c: RGB, k: number): RGB => mix(c, [255, 248, 230], k);
 
 // ---------------------------------------------------------------- sculpted solids (the Jatayu technique)
 
@@ -744,6 +746,7 @@ export function lamps(ref: Ref, e: El<'lamps'>) {
 }
 
 export const ELEMENTS: Record<string, (ref: Ref, e: any) => void> = {
-  sky, clouds, terrain, water, mist, tree, forest, grass, building, birds, figure, boat, blob, polygon, glow, animal, rain, snowfall, lotus, lamps,
+  sky, clouds, terrain, water, mist, tree, forest, grass, building, birds, figure, boat, blob, polygon, glow, animal, rain, snowfall, lotus, lamps, studio, road, reflect,
+  library: (ref, e) => drawLibrary(ref, e),
   custom: (ref, e) => e.draw(ref),
 };

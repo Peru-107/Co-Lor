@@ -8,6 +8,7 @@ Owner: Peru (GitHub `Peru-107`). Style: informal, iterative, show renders early.
 - `npm install`
 - `npm run paint -- --text "a temple by a lake at sunset" out.png` (also writes out.under.png + out.scene.json)
 - `npm run paint -- scenes/temple-pond.ts out.png --medium charcoal`
+- `npm run paint -- --text-file notes/ferrari-spec.txt out.png` (long descriptions)
 - `npm run photo -- photo.jpg out.png --preset pastel`
 - `npm run build` → `docs/index.html` (single-file offline app; also the GitHub Pages site)
 - `npm run check` → TypeScript type-check
@@ -25,26 +26,21 @@ depth 0 near → 1 far. One scene light (`light.dir` = where light comes FROM). 
 ellipses shaded from distance-to-axis normals (`sculpt`). Fine detail via `ref.mark()` (repainted as real
 strokes, auto-occluded). No trademark logos or copyrighted characters.
 
-## In progress: the object LIBRARY
-Goal: every drawable thing becomes one library entry (trigger words, option extraction, placement, draw()),
-so new objects never touch the engine. Started: `src/library/types.ts` (the `LibraryEntry` interface).
-Next steps:
-1. `src/library/index.ts` registry; scene element `{type:'library', name, x, y, size, facing, options}`
-   dispatched in `ELEMENTS`; parser adds every entry's words/phrases to `VOCAB` and calls `extract()`.
-2. First entry `src/library/supercar.ts` from `notes/ferrari-spec.txt` (Peru's paragraph): side-view wedge
-   profile in (u,v) units of car length, wheel arches cut from the body polygon, gloss paint as tone bands
-   (sky reflection on top, sharp shoulder highlight, darker crimson lower body, fender-arc highlights),
-   dark glass with a reflection streak, side intake behind the door, mirror, narrow headlight, circular taillight,
-   black splitter/skirts/diffuser with fins, multi-spoke dark wheels, ventilated discs, yellow calipers, small
-   plain yellow centre caps (NO prancing-horse badge). Words: car, supercar, ferrari, lamborghini, porsche,
-   mclaren, coupe, "sports car". Options: paint colour (dominant colour word not attached to a part;
-   "rosso corsa" = red), caliper colour, wheel finish.
-3. New settings: `studio` (backdrop + floor + softbox glow + `reflect` element mirroring only the car's pixels
-   via the owner map) and `road` (asphalt band). Words: studio, showroom, road, highway, track, racetrack.
-4. Test with the full text of `notes/ferrari-spec.txt`; then move existing objects (temple, banyan,
-   elephant, boat…) into library entries.
-5. UI: cap the "Skipped" list (~30 + "N more"), keep chips spaced.
+## The object LIBRARY (done) and what's next
+Every drawable thing with structure is a `LibraryEntry` in `src/library/` (trigger words, phrases, absorbed part-words,
+`extract()` for options, placement, `draw()`), registered in `src/library/index.ts`. Scene element
+`{type:'library', name, x, y, size, facing, options}` is dispatched through `ELEMENTS`; the parser adds every entry's
+words to `VOCAB`, replaces phrases ("sports car") with the first word, and lets an entry absorb part-words so
+"prancing horse" never becomes a horse. Shared helpers: `src/library/util.ts` (`readColours`, `frame`, `profile`,
+`groundShadow`). Staging elements in `src/scene/staging.ts`: `studio`, `road`, `reflect` (mirrors only one element's
+pixels via the owner map). Entries so far: supercar, lighthouse, windmill. Test with
+`npm run paint -- --text-file notes/ferrari-spec.txt out/ferrari.png`.
+
+Next:
+1. Move the existing objects (temple, banyan, elephant, boat, ...) into library entries.
+2. More entries (wind turbine, bicycle, house, ...); front and rear views of the supercar.
+3. Parser: facing words ("facing left"), per-object positions beyond left/right/centre.
 
 ## Publishing
-Repo `Peru-107/dry-media-painter` (public). Push `main`, then Settings → Pages → Deploy from branch → `main` /docs.
+Repo `Peru-107/Co-Lor` (public). Push `main`, then Settings → Pages → Deploy from branch → `main` /docs.
 Commits end with the attribution lines the session asks for.

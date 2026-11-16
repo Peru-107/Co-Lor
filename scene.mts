@@ -1,6 +1,7 @@
 #!/usr/bin/env -S npx tsx
 // Usage: npx tsx scene.mts <scene.ts|scene.json> <out.png> [--medium pastel|charcoal|gouache|impressionist] [--width 1920 --height 1080] [--seed 7]
 //        npx tsx scene.mts --text "a temple by a lake at sunset" <out.png>   (built-in word parser)
+//        npx tsx scene.mts --text-file notes/ferrari-spec.txt <out.png>      (long descriptions)
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
@@ -13,7 +14,7 @@ const pos = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].
 
 let scene: any;
 let out: string;
-const text = flag('text');
+const text = flag('text') ?? (flag('text-file') ? fs.readFileSync(flag('text-file')!, 'utf8') : undefined);
 if (text) {
   const { textToScene } = await import('./src/scene/parse.ts');
   scene = textToScene(text, Number(flag('seed') ?? 7));
