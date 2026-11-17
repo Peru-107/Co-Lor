@@ -15,10 +15,13 @@ export function applyGrade(
   paper: PaperSubstrate,
   g: Preset['grade'],
   light: { x: number; y: number },
-  focus: { x: number; y: number }
+  focus: { x: number; y: number },
+  /** Size of the whole picture when `pixels` is only one band of it (light and focus are in band coordinates). */
+  whole?: { width: number; height: number }
 ) {
   const { width: W, height: H, tooth } = paper;
-  const diag = Math.hypot(W, H);
+  const FW = whole?.width ?? W, FH = whole?.height ?? H;
+  const diag = Math.hypot(FW, FH);
   const bloomR = diag * 0.33;
   const k = g.contrast * 3.2;
   for (let y = 0; y < H; y++) {
@@ -40,7 +43,7 @@ export function applyGrade(
       const shadow = smoothstep(0.28, 0.03, L) * g.coolShadows;
       r -= shadow * 3; b += shadow * 7;
 
-      const dx = (x - focus.x) / (W * 0.62), dy = (y - focus.y) / (H * 0.68);
+      const dx = (x - focus.x) / (FW * 0.62), dy = (y - focus.y) / (FH * 0.68);
       const vig = 1 - smoothstep(0.55, 1.6, Math.sqrt(dx * dx + dy * dy)) * 0.3 * g.vignette;
       const emb = 1 + (tooth[i] - 0.5) * g.emboss;
       const m = vig * emb;

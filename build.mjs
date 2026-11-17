@@ -14,4 +14,5 @@ const html = fs
   .replace('__APP_JS__', () => app.replace(/<\/script/gi, '<\\/script'));
 fs.mkdirSync('docs', { recursive: true });
 fs.writeFileSync('docs/index.html', html);
+fs.writeFileSync('docs/live.html', fs.readFileSync('web/live.html', 'utf8').replace('__SAMPLE__', uri('examples/example.under.jpg')));
 console.log('docs/index.html', Math.round(html.length / 1024), 'KB');

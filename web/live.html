@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Live Dry-Media Filter</title>
+<style>
+  :root { --bg:#14151a; --panel:#1d1f26; --ink:#e8e6e1; --mute:#9a9ca6; --acc:#e0a458; --line:#2c2f39; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f3efe6; --panel:#fffaf0; --ink:#25221c; --mute:#6c675c; --acc:#b4701c; --line:#ddd5c4; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, sans-serif; }
+  header { padding:14px 16px 4px; max-width:1200px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 2px; }
+  p.sub { margin:0; color:var(--mute); font-size:13px; }
+  main { max-width:1200px; margin:0 auto; padding:10px 16px 28px; display:grid; gap:14px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { main { grid-template-columns: 1fr 290px; } }
+  .stage { align-self:start; background:#000; border-radius:10px; overflow:hidden; position:relative; border:1px solid var(--line); }
+  canvas { display:block; width:100%; height:auto; }
+  .fps { position:absolute; left:10px; top:10px; background:rgba(0,0,0,.6); color:#fff; padding:3px 8px; border-radius:6px; font:12px ui-monospace,monospace; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .panel h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); margin:0 0 8px; }
+  button, label.btn { display:inline-block; background:var(--acc); color:#1a1305; border:0; border-radius:7px; padding:8px 12px; font:600 13px system-ui; cursor:pointer; margin:0 6px 6px 0; }
+  button.alt, label.btn.alt { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  input[type=file] { display:none; }
+  .row { display:grid; grid-template-columns: 92px 1fr 38px; align-items:center; gap:8px; margin:6px 0; font-size:13px; }
+  .row output { color:var(--mute); text-align:right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width:100%; accent-color: var(--acc); }
+  .msg { color:var(--mute); font-size:12px; margin-top:6px; min-height:1.4em; }
+  .presets button { margin-bottom:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Live dry-media filter</h1>
+  <p class="sub">Real-time painterly filter in pure code (a GPU shader). No AI model, no network: your camera or file never leaves this page.</p>
+</header>
+<main>
+  <div class="stage"><canvas id="out"></canvas><div class="fps" id="fps">starting…</div></div>
+  <div>
+    <div class="panel">
+      <h2>Source</h2>
+      <button id="cam">Use webcam</button>
+      <label class="btn alt">Open image or video<input id="file" type="file" accept="image/*,video/*" /></label>
+      <button class="alt" id="demo">Animated demo</button>
+      <button class="alt" id="sample">Sample picture</button>
+      <div class="msg" id="msg"></div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h2>Look</h2>
+      <div class="presets">
+        <button class="alt" data-p="pastel">Pastel</button>
+        <button class="alt" data-p="oil">Oil</button>
+        <button class="alt" data-p="sketch">Sketch</button>
+        <button class="alt" data-p="exact">Near-exact</button>
+      </div>
+      <div class="row"><span>Quality</span><select id="quality" style="grid-column: 2 / 4"><option value="640">Fast (640 px)</option><option value="960" selected>Balanced (960 px)</option><option value="1280">High (1280 px)</option></select></div>
+      <div class="row"><span>Brush size</span><input id="radius" type="range" min="2" max="12" step="1" value="6" /><output></output></div>
+      <div class="row"><span>Sharpness</span><input id="sharp" type="range" min="2" max="14" step="0.5" value="8" /><output></output></div>
+      <div class="row"><span>Stroke flow</span><input id="aniso" type="range" min="0.1" max="1" step="0.05" value="0.6" /><output></output></div>
+      <div class="row"><span>Paper</span><input id="paper" type="range" min="0" max="1" step="0.05" value="0.35" /><output></output></div>
+      <div class="row"><span>Outlines</span><input id="edge" type="range" min="0" max="1" step="0.05" value="0.3" /><output></output></div>
+      <div class="row"><span>Colour</span><input id="sat" type="range" min="0" max="1.8" step="0.05" value="1.1" /><output></output></div>
+      <button id="save" class="alt">Save PNG</button>
+    </div>
+  </div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('out');
+  const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true, antialias: false });
+  const msg = (t) => ($('msg').textContent = t);
+  if (!gl) { msg('This browser has no WebGL2, so the live filter cannot run.'); return; }
+  const floatOK = gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float');
+  if (!floatOK) { msg('This GPU cannot render to float textures; the live filter needs that.'); return; }
+  gl.getExtension('OES_texture_float_linear');
+
+  const VERT = `#version 300 es
+  in vec2 p; out vec2 uv; void main(){ uv = p*0.5+0.5; gl_Position = vec4(p,0.,1.); }`;
+  const HEAD = `#version 300 es
+  precision highp float; precision highp int; in vec2 uv; out vec4 o; uniform vec2 texel;`;
+
+  // Pass 1: structure tensor from Sobel gradients of luminance (E, F, G) = (fx*fx, fx*fy, fy*fy).
+  const TENSOR = HEAD + `
+  uniform sampler2D src;
+  float L(vec2 d){ vec3 c = texture(src, uv + d*texel).rgb; return dot(c, vec3(.299,.587,.114)); }
+  void main(){
+    float fx = (L(vec2(1,-1)) + 2.*L(vec2(1,0)) + L(vec2(1,1)) - L(vec2(-1,-1)) - 2.*L(vec2(-1,0)) - L(vec2(-1,1))) * .25;
+    float fy = (L(vec2(-1,1)) + 2.*L(vec2(0,1)) + L(vec2(1,1)) - L(vec2(-1,-1)) - 2.*L(vec2(0,-1)) - L(vec2(1,-1))) * .25;
+    o = vec4(fx*fx, fx*fy, fy*fy, 1.);
+  }`;
+  // Pass 2/3: separable gaussian smoothing of the tensor, so stroke direction follows shapes, not pixel noise.
+  const BLUR = HEAD + `
+  uniform sampler2D src; uniform vec2 dir; uniform float sigma;
+  void main(){
+    vec4 acc = vec4(0.); float ws = 0.;
+    int R = int(ceil(sigma*2.));
+    for (int i=-12;i<=12;i++){ if (abs(i) > R) continue;
+      float w = exp(-float(i*i)/(2.*sigma*sigma));
+      acc += texture(src, uv + dir*texel*float(i)).rgba * w; ws += w; }
+    o = acc/ws;
+  }`;
+  // Pass 4/5: flow-based bilateral filter. Colour is averaged ALONG the local edge direction (so strokes follow shapes)
+  // and a little ACROSS it, with weights that stop at colour jumps (so edges stay crisp). Two cheap 1-D passes: real time.
+  const FLOW = HEAD + `
+  uniform sampler2D src, tensor; uniform float taps, sigR, across;
+  void main(){
+    vec3 t = texture(tensor, uv).xyz;
+    float E=t.x, F=t.y, G=t.z;
+    float d = sqrt((E-G)*(E-G) + 4.*F*F);
+    float l1 = .5*(E+G+d);
+    vec2 tv = vec2(l1 - E, -F);
+    float tl = length(tv);
+    vec2 tan = tl > 1e-5 ? tv/tl : vec2(1., 0.);
+    vec2 dir = across > .5 ? vec2(-tan.y, tan.x) : tan;
+    vec3 c0 = texture(src, uv).rgb, acc = c0; float ws = 1.;
+    float ss = max(1., taps*.5);
+    for (int i=1;i<=24;i++){ if (float(i) > taps) break;
+      float ws0 = exp(-float(i*i)/(2.*ss*ss));
+      for (int sgn=0; sgn<2; sgn++){
+        vec3 c = texture(src, uv + dir*texel*float(sgn==0 ? i : -i)).rgb; vec3 dc = c - c0;
+        float w = ws0 * exp(-dot(dc,dc)/(2.*sigR*sigR));
+        acc += c*w; ws += w; } }
+    o = vec4(acc/ws, 1.);
+  }`;
+  // Pass 5: paper tooth, outlines along strong edges, colour, and a faint warm tone.
+  const FINAL = HEAD + `
+  uniform sampler2D src, orig, tensor; uniform float paper, edge, sat; uniform vec2 res;
+  float h21(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
+  float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+    return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
+  void main(){
+    vec3 c = texture(src, uv).rgb;
+    float Ls = dot(c, vec3(.299,.587,.114));
+    c = mix(vec3(Ls), c, sat);
+    vec2 px = uv*res;
+    float tooth = vn(px*.55)*.5 + vn(px*1.4+7.)*.3 + h21(floor(px))*.2;
+    float grain = (tooth - .5);
+    // dry media: pigment catches the tooth peaks, so lights get paper showing through and darks stay solid
+    float lift = smoothstep(.35, 1., Ls) * paper * .35;
+    c = mix(c, vec3(.96,.93,.86), clamp(lift * (1. - tooth) * 1.2, 0., 1.));
+    c *= 1. + grain * paper * .30;
+    vec3 t = texture(tensor, uv).xyz;
+    float mag = sqrt(t.x + t.z);
+    float line = smoothstep(.10, .38, mag) * edge;
+    c *= 1. - line * .55;
+    o = vec4(clamp(c, 0., 1.), 1.);
+  }`;
+  // Passthrough, used to draw the source straight into a float target when needed.
+  const BLIT = HEAD + `uniform sampler2D src; void main(){ o = texture(src, uv); }`;
+
+  function prog(fs) {
+    const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+    const p = gl.createProgram();
+    gl.attachShader(p, mk(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const nm = gl.getActiveUniform(p, i).name; u[nm] = gl.getUniformLocation(p, nm); }
+    return { p, u };
+  }
+  let P;
+  try { P = { tensor: prog(TENSOR), blur: prog(BLUR), flow: prog(FLOW), fin: prog(FINAL) }; }
+  catch (e) { msg('Shader error: ' + e.message); console.error(e); return; }
+
+  const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+  function tex(w, h, float) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    if (float) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    return { t, fb };
+  }
+
+  let W = 0, H = 0, T = null;
+  function size(w, h) {
+    const cap = +$('quality').value, k = Math.min(1, cap / Math.max(w, h));
+    const nw = Math.max(2, Math.round(w * k)), nh = Math.max(2, Math.round(h * k));
+    if (nw === W && nh === H) return;
+    W = nw; H = nh; canvas.width = W; canvas.height = H;
+    T = { src: tex(W, H, false), a: tex(W, H, true), b: tex(W, H, true), p1: tex(W, H, false), p2: tex(W, H, false), paint: tex(W, H, false) };
+  }
+
+  function pass(pr, target, uniforms, inputs) {
+    gl.useProgram(pr.p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+    gl.viewport(0, 0, W, H);
+    let unit = 0;
+    for (const [name, t] of Object.entries(inputs)) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t.t); gl.uniform1i(pr.u[name], unit++); }
+    gl.uniform2f(pr.u.texel, 1 / W, 1 / H);
+    for (const [k, v] of Object.entries(uniforms)) { if (!pr.u[k]) continue; Array.isArray(v) ? gl.uniform2f(pr.u[k], v[0], v[1]) : gl.uniform1f(pr.u[k], v); }
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  const S = () => ({ radius: +$('radius').value, sharp: +$('sharp').value, aniso: +$('aniso').value, paper: +$('paper').value, edge: +$('edge').value, sat: +$('sat').value });
+  for (const id of ['radius','sharp','aniso','paper','edge','sat']) {
+    const el = $(id), out = el.parentNode.querySelector('output');
+    const upd = () => (out.textContent = el.value); el.addEventListener('input', upd); upd();
+  }
+  const LOOKS = {
+    pastel: { radius: 6, sharp: 8, aniso: 0.6, paper: 0.55, edge: 0.3, sat: 1.1 },
+    oil: { radius: 8, sharp: 10, aniso: 0.35, paper: 0.1, edge: 0.15, sat: 1.25 },
+    sketch: { radius: 4, sharp: 6, aniso: 0.8, paper: 0.7, edge: 0.9, sat: 0.15 },
+    exact: { radius: 2, sharp: 14, aniso: 1, paper: 0, edge: 0, sat: 1 },
+  };
+  document.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => {
+    for (const [k, v] of Object.entries(LOOKS[b.dataset.p])) { $(k).value = v; $(k).dispatchEvent(new Event('input')); }
+  }));
+
+  // ---- sources ----
+  let source = null; // {el, w, h, video}
+  const demo = document.createElement('canvas'); demo.width = 960; demo.height = 540;
+  const dctx = demo.getContext('2d');
+  function drawDemo(t) {
+    const g = dctx.createLinearGradient(0, 0, 0, 540); g.addColorStop(0, '#2a3d7a'); g.addColorStop(.55, '#e98a4f'); g.addColorStop(1, '#2b2330');
+    dctx.fillStyle = g; dctx.fillRect(0, 0, 960, 540);
+    dctx.fillStyle = '#ffd98a'; dctx.beginPath(); dctx.arc(480 + Math.sin(t / 2000) * 260, 270 + Math.cos(t / 2000) * 40, 62, 0, 7); dctx.fill();
+    dctx.fillStyle = '#1b1822'; dctx.beginPath(); dctx.moveTo(0, 540); for (let x = 0; x <= 960; x += 20) dctx.lineTo(x, 400 + Math.sin(x / 90 + t / 3000) * 40 + Math.sin(x / 31) * 8); dctx.lineTo(960, 540); dctx.fill();
+    dctx.fillStyle = '#c33'; dctx.fillRect(100 + (t / 20) % 760, 440, 80, 30);
+  }
+  function setSource(s) { source = s; }
+  setSource({ el: demo, w: 960, h: 540, demo: true });
+  window.__useImage = (url, done) => { const im = new Image(); im.onload = () => { setSource({ el: im, w: im.naturalWidth, h: im.naturalHeight }); done && done(); }; im.src = url; };
+  $('sample').onclick = () => window.__useImage('__SAMPLE__', () => msg('Sample picture.'));
+  $('demo').onclick = () => { setSource({ el: demo, w: 960, h: 540, demo: true }); msg('Animated demo.'); };
+  $('file').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const url = URL.createObjectURL(f);
+    if (f.type.startsWith('video')) {
+      const v = document.createElement('video'); v.src = url; v.loop = true; v.muted = true; v.playsInline = true;
+      v.onloadeddata = () => { v.play(); setSource({ el: v, w: v.videoWidth, h: v.videoHeight, video: true }); msg(f.name); };
+    } else {
+      const im = new Image(); im.onload = () => { setSource({ el: im, w: im.naturalWidth, h: im.naturalHeight }); msg(f.name); }; im.src = url;
+    }
+  };
+  $('cam').onclick = async () => {
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+      const v = document.createElement('video'); v.srcObject = st; v.muted = true; v.playsInline = true; await v.play();
+      setSource({ el: v, w: v.videoWidth, h: v.videoHeight, video: true }); msg('Webcam on. Nothing is uploaded; it all stays in this tab.');
+    } catch (e) { msg('Could not open the camera: ' + e.message); }
+  };
+  $('save').onclick = () => { const a = document.createElement('a'); a.download = 'live-painting.png'; a.href = canvas.toDataURL('image/png'); a.click(); };
+
+  let frames = 0, t0 = performance.now(), last = 0;
+  function render(t) {
+    if (!source) return;
+    if (source.demo) drawDemo(t);
+    if (source.video && source.el.readyState < 2) return;
+    size(source.w, source.h);
+    const s = S();
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.src.t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source.el);
+    const sigma = Math.max(1.5, Math.min(4.5, W / 420));
+    pass(P.tensor, T.a, {}, { src: T.src });
+    pass(P.blur, T.b, { dir: [1, 0], sigma }, { src: T.a });
+    pass(P.blur, T.a, { dir: [0, 1], sigma }, { src: T.b });
+    const sigR = Math.max(0.04, 0.34 - s.sharp * 0.02);
+    const taps = Math.min(24, Math.round(s.radius * 2 * Math.max(1, W / 960)));
+    // two rounds of along-flow smoothing give the soft, dragged-pigment look; a short pass across the flow finishes it
+    pass(P.flow, T.p1, { taps, sigR, across: 0 }, { src: T.src, tensor: T.a });
+    pass(P.flow, T.p2, { taps, sigR, across: 0 }, { src: T.p1, tensor: T.a });
+    pass(P.flow, T.paint, { taps: Math.round(1 + (1 - s.aniso) * 5), sigR, across: 1 }, { src: T.p2, tensor: T.a });
+    pass(P.fin, null, { paper: s.paper, edge: s.edge, sat: s.sat, res: [W, H] }, { src: T.paint, orig: T.src, tensor: T.a });
+  }
+  function frame(t) {
+    requestAnimationFrame(frame);
+    render(t);
+    frames++;
+    if (t - t0 > 800) { $('fps').textContent = (frames * 1000 / (t - t0)).toFixed(0) + ' fps · ' + W + '×' + H; frames = 0; t0 = t; }
+  }
+  requestAnimationFrame(frame);
+  // Benchmark hook (also handy from the console): GPU time per frame with the current settings, in ms.
+  const px = new Uint8Array(4); const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  window.__bench = (n = 20) => { render(0); sync(); const a = performance.now(); for (let i = 0; i < n; i++) { render(i * 16); sync(); } return { W, H, msPerFrame: (performance.now() - a) / n }; };
+})();
+</script>
+</body>
+</html>

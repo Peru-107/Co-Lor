@@ -25,13 +25,14 @@ export interface PaperOptions {
  * Cold-pressed cotton paper: two octaves of grain (fibre clumps + finer tooth), a per-pixel speck,
  * faint horizontal laid lines from the mould, and widely spaced vertical chain lines.
  */
-export function createPaper(width: number, height: number, seed: number, o: PaperOptions): PaperSubstrate {
+export function createPaper(width: number, height: number, seed: number, o: PaperOptions, offsetY = 0): PaperSubstrate {
   const n = width * height;
   const tooth = new Float32Array(n);
   const basePixels = new Uint8ClampedArray(n * 4);
   const inv = 1 / o.cell;
   const chainGap = o.laidPeriod * 18;
-  for (let y = 0; y < height; y++) {
+  for (let row = 0; row < height; row++) {
+    const y = row + offsetY; // global row, so bands of one picture share one sheet of paper
     const laid = Math.sin((y / o.laidPeriod) * Math.PI);
     const laidTerm = laid * laid * 0.08;
     for (let x = 0; x < width; x++) {
@@ -41,7 +42,7 @@ export function createPaper(width: number, height: number, seed: number, o: Pape
       const cx = ((x % chainGap) + chainGap) % chainGap - chainGap / 2;
       const chain = Math.exp(-(cx * cx) / (o.laidPeriod * 0.6)) * 0.05;
       const h = clamp(clump * 0.42 + fine * 0.28 + speck * 0.22 + laidTerm + chain, 0, 1);
-      const i = y * width + x;
+      const i = row * width + x;
       tooth[i] = h;
       const s = (h - 0.5) * o.shade;
       basePixels[i * 4] = clamp(o.color[0] + s, 0, 255);

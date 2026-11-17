@@ -1,5 +1,5 @@
 import { detectEdges, gaussBlur, luminance, orientationField, OrientationField, toFloatRGB, traceChains } from './analyze';
-import { blendPixel, paintStroke, StrokeStyle } from './core/brush';
+import { blendPixel, paintStroke, setRegionY, StrokeStyle } from './core/brush';
 import { compareImages, Quality } from './metrics';
 import { createPaper, PaperSubstrate, RGB } from './core/paper';
 import { clamp, createRng, humanizePolyline, Point2D, Rng, smoothstep } from './core/rng';
@@ -24,6 +24,8 @@ export interface RenderOptions {
   flowHint?: { angle: Float32Array; weight: Float32Array };
   /** Pixel position of the main light (sun/moon) for the grade; default: brightest region. */
   light?: { x: number; y: number };
+  /** Set when `src` is one horizontal band of a larger picture (see tiles.ts): keeps scale, grain and grade continuous. */
+  region?: { y0: number; fullW: number; fullH: number };
   /** Pixel position of the subject; default: most detailed region. */
   focus?: { x: number; y: number };
   /** Linework from a scene (grass blades, birds, roots...) painted as real strokes on top of the colour layers. */
@@ -183,7 +185,10 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
   const tick = async () => { if (opts.tick) await opts.tick(); };
   const { width: w, height: h } = src;
   const n = w * h;
-  const scale = Math.max(w, h) / 1920;
+  const region = opts.region;
+  const fullW = region?.fullW ?? w, fullH = region?.fullH ?? h;
+  const scale = Math.max(fullW, fullH) / 1920;
+  setRegionY(region?.y0 ?? 0);
   const rng = createRng(opts.seed ?? 7);
 
   progress('Analysing image', 0);
@@ -199,11 +204,10 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
   await tick();
 
   // Focus = most detailed region (pulled 40% toward centre). Light = brightest broad region.
-  const detail = gaussBlur(orientationGradient(lum, w, h, scale), w, h, 1, Math.max(w, h) * 0.06);
-  const fPeak = argmax2D(detail, w);
-  const focus = opts.focus ?? { x: fPeak.x * 0.6 + w * 0.2, y: fPeak.y * 0.6 + h * 0.2 };
-  const light = opts.light ?? argmax2D(gaussBlur(lum, w, h, 1, Math.max(w, h) * 0.1), w);
-  const diag = Math.hypot(w, h);
+  const found = opts.focus && opts.light ? undefined : findFocusLight(lum, w, h, scale);
+  const focus = opts.focus ?? found!.focus;
+  const light = opts.light ?? found!.light;
+  const diag = Math.hypot(fullW, fullH);
   await tick();
 
   progress('Laying paper', 0.05);
@@ -211,7 +215,7 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
     ...preset.paper,
     cell: preset.paper.cell * Math.max(0.6, scale),
     laidPeriod: preset.paper.laidPeriod * Math.max(0.6, scale),
-  });
+  }, region?.y0 ?? 0);
   const pixels = new Uint8ClampedArray(paper.basePixels);
   const ctx: Ctx = { w, h, pixels, paper, rng, preset };
 
@@ -396,10 +400,20 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
   }
 
   progress('Grading', 0.96);
-  applyGrade(pixels, paper, preset.grade, light, focus);
+  applyGrade(pixels, paper, preset.grade, light, focus, region ? { width: fullW, height: fullH } : undefined);
   if (preset.exact) quality = compareImages(pixels, source, w, h); // final number, after grading
   progress('Done', 1);
   return { width: w, height: h, data: pixels, stats: { strokes, contourStrokes, hatchStrokes, ms: Date.now() - t0, quality } };
+}
+
+/** Default subject (most detailed region, pulled toward the centre) and main light (brightest broad region). */
+export function findFocusLight(lum: Float32Array, w: number, h: number, scale: number) {
+  const detail = gaussBlur(orientationGradient(lum, w, h, scale), w, h, 1, Math.max(w, h) * 0.06);
+  const fPeak = argmax2D(detail, w);
+  return {
+    focus: { x: fPeak.x * 0.6 + w * 0.2, y: fPeak.y * 0.6 + h * 0.2 },
+    light: argmax2D(gaussBlur(lum, w, h, 1, Math.max(w, h) * 0.1), w),
+  };
 }
 
 /** Gradient magnitude on a lightly blurred luminance: a cheap "where is the detail" map. */

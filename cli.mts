@@ -1,7 +1,9 @@
 #!/usr/bin/env -S npx tsx
 // Usage: npx tsx cli.mts <input image> <output.png> [--preset pastel|charcoal|gouache|impressionist] [--size 1920] [--seed 7]
 import sharp from 'sharp';
+import os from 'node:os';
 import { renderPainting, PRESETS } from './src/paint.ts';
+import { renderPaintingParallel } from './src/parallel-node.ts';
 
 const args = process.argv.slice(2);
 const flag = (name: string, def: string) => {
@@ -26,7 +28,8 @@ const { data, info } = await sharp(input)
   .toBuffer({ resolveWithObject: true });
 
 let last = '';
-const res = await renderPainting(
+const threads = Number(flag("threads", String(Math.min(os.availableParallelism(), 8))));
+const res = await (threads > 1 ? (s: any, o: any) => renderPaintingParallel(s, o, threads) : renderPainting)(
   { width: info.width, height: info.height, data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length) },
   {
     preset,

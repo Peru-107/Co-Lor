@@ -31,6 +31,10 @@ export function blendPixel(pixels: Uint8ClampedArray, idx: number, r: number, g:
   pixels[p + 2] = b * a + pixels[p + 2] * inv;
 }
 
+/** When a painting is rendered in bands, the band's first row sits at this row of the whole picture (keeps grain continuous). */
+let regionY = 0;
+export function setRegionY(y: number) { regionY = y; }
+
 // Scratch buffers reused across strokes (coverage + lateral coordinate).
 let cov = new Float32Array(1 << 16);
 let lat = new Float32Array(1 << 16);
@@ -175,7 +179,7 @@ export function paintStroke(
       const h = tooth[idx];
       // Dry media: light pressure only reaches the tooth peaks, harder pressure fills the valleys.
       const reach = 1 - c * 0.55;
-      const grainMod = lerp(1, smoothstep(reach - 0.3, reach + 0.12, h + hash2D(x, y, 419) * 0.14), st.grain);
+      const grainMod = lerp(1, smoothstep(reach - 0.3, reach + 0.12, h + hash2D(x, y + regionY, 419) * 0.14), st.grain);
       const streakMod = st.streak > 0 ? 1 - st.streak * smoothstep(0.38, 0.72, noise2D(lat[bi] * streakFreq, phase, 977)) : 1;
       const a = c * st.opacity * grainMod * streakMod;
       const sh = (h - 0.5) * st.toothShade;
