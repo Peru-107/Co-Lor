@@ -61,13 +61,13 @@ export function drawScene(scene: Scene, size?: { width?: number; height?: number
 /** Text-free path: scene -> underpainting -> dry-media painting. */
 export async function renderScene(
   scene: Scene,
-  opts: { width?: number; height?: number; medium?: string; seed?: number; onProgress?: (s: string, f: number) => void; tick?: () => Promise<void> | void } = {}
+  opts: { width?: number; height?: number; medium?: string; seed?: number; onProgress?: (s: string, f: number) => void; tick?: () => Promise<void> | void; paint?: typeof renderPainting } = {}
 ): Promise<SceneRender> {
   opts.onProgress?.('Drawing scene', 0);
   const { width, height, data, ref } = drawScene(scene, opts);
   await opts.tick?.();
   const focus = scene.focus ? { x: scene.focus[0] * width, y: scene.focus[1] * height } : undefined;
-  const painting = await renderPainting(
+  const painting = await (opts.paint ?? renderPainting)(
     { width, height, data },
     {
       preset: opts.medium ?? scene.medium ?? 'pastel',

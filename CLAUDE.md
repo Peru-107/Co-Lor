@@ -36,7 +36,11 @@ words to `VOCAB`, replaces phrases ("sports car") with the first word, and lets 
 pixels via the owner map). Entries so far: supercar, lighthouse, windmill. Test with
 `npm run paint -- --text-file notes/ferrari-spec.txt out/ferrari.png`.
 
+3D: `src/render3d/sdf.ts` (ray-marcher into the Ref), `src/render3d/creatures.ts` (`SPECIES` table + builder),
+`src/library/creatures.ts` (one entry per species). Parallel painting: `src/tiles.ts`, `src/parallel-node.ts`. Live filter: `web/live.html`.
+
 Next:
+0. Better creature anatomy (bat wings are boxy, heads are small), more species, a faster 3D stage (worker threads).
 1. Move the existing objects (temple, banyan, elephant, boat, ...) into library entries.
 2. More entries (wind turbine, bicycle, house, ...); front and rear views of the supercar.
 3. Parser: facing words ("facing left"), per-object positions beyond left/right/centre.

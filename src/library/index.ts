@@ -8,8 +8,9 @@ import { lighthouse } from './lighthouse';
 import type { LibraryEntry } from './types';
 import { supercar } from './supercar';
 import { windmill } from './windmill';
+import { CREATURE_ENTRIES } from './creatures';
 
-export const ENTRIES: LibraryEntry[] = [supercar, lighthouse, windmill];
+export const ENTRIES: LibraryEntry[] = [supercar, lighthouse, windmill, ...CREATURE_ENTRIES];
 export const LIBRARY: Record<string, LibraryEntry> = Object.fromEntries(ENTRIES.map((e) => [e.name, e]));
 
 /** Strings like "#b01018" in options become [r, g, b] so hand-written scenes can use either. */

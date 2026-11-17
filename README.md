@@ -89,6 +89,28 @@ Colour words attach to the thing they describe: in "bright yellow brake calipers
 the paint colour is whatever the rest of the text votes for. Words that only name a part of an object ("prancing horse"
 badge, "bumper", "tyre") are absorbed by it instead of turning into a horse.
 
+## Creatures and 3D objects
+
+Some library entries are built in 3D: a small ray-marcher (`src/render3d/sdf.ts`) renders shapes made of ellipsoids, round
+cones and boxes with soft shadows and ambient occlusion straight into the underpainting, and the brushes then paint over
+it. Animals come from a body-plan builder (`src/render3d/creatures.ts`): one table row per species (`SPECIES`) gives the
+proportions, and the same builder makes the dragon, unicorn, lion, tiger, wolf, fox, cat, bear, giraffe, pig and griffin.
+
+```bash
+npm run paint -- --text "a dragon reading a newspaper" dragon.png
+npm run paint -- --text "two white unicorns by a lake at dawn" unicorns.png
+```
+
+This is a vocabulary of known shapes, not open-ended drawing: a word that is not in the library still lands in *Skipped*.
+The creatures are chunky and stylised, and a 3D creature adds roughly 30 to 40 seconds to a 1920x1080 render.
+
+## Speed
+
+- **Parallel painting:** the CLI paints on worker threads (bands that overlap and blend, `src/tiles.ts`). `--threads N`
+  to change; about 2.5x faster on an 8-thread machine.
+- **Real time:** `docs/live.html` is a GPU shader version of the painterly look (webcam, video or image, tens of frames a
+  second). Simpler than the stroke painter, and it never leaves the browser.
+
 ## Teach it new things
 
 1. **A new object:** copy `src/library/windmill.ts`, change the drawing, and add it to `ENTRIES` in `src/library/index.ts`.

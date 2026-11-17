@@ -6,7 +6,9 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
+import os from 'node:os';
 import { renderScene } from './src/scene/render.ts';
+import { renderPaintingParallel } from './src/parallel-node.ts';
 
 const args = process.argv.slice(2);
 const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
@@ -27,10 +29,12 @@ if (text) {
 if (!out) { console.error('Usage: npx tsx scene.mts <scene.ts|.json> <out.png>  |  --text "..." <out.png>'); process.exit(1); }
 
 let last = '';
+const threads = Number(flag('threads') ?? Math.min(os.availableParallelism(), 8));
 const res = await renderScene(scene, {
   width: flag('width') ? Number(flag('width')) : undefined,
   height: flag('height') ? Number(flag('height')) : undefined,
   medium: flag('medium'),
+  paint: threads > 1 ? ((s: any, o: any) => renderPaintingParallel(s, o, threads)) as any : undefined,
   seed: flag('seed') ? Number(flag('seed')) : undefined,
   onProgress: (s) => { if (s !== last) console.log(s); last = s; },
 });
