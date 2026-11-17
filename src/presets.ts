@@ -122,5 +122,33 @@ export const impressionist: Preset = {
   grade: { contrast: 0.06, warmth: 0.8, coolShadows: 0.8, vignette: 0.8, emboss: 0.04 },
 };
 
-export const PRESETS: Record<string, Preset> = { pastel, charcoal, gouache, impressionist };
+/**
+ * Faithful: a close copy of a reference photo. Small brushes everywhere (no focus falloff), a low error threshold so every
+ * region that drifts from the photo gets repainted, tight colour (no jitter, no saturation boost), outlines on to keep
+ * edges crisp, and a neutral grade (no warm/cool tint, no vignette). Still strokes on paper, just much more accurate.
+ */
+export const faithful: Preset = {
+  ...pastel,
+  name: 'faithful',
+  layers: [
+    { radius: 24, threshold: 0, grain: 0.5, opacity: 0.97, maxLen: 8, minLen: 2 },
+    { radius: 11, threshold: 14, grain: 0.45, opacity: 0.96, maxLen: 8, minLen: 2 },
+    { radius: 5.5, threshold: 10, grain: 0.35, opacity: 0.95, maxLen: 7, minLen: 1 },
+    { radius: 2.8, threshold: 8, grain: 0.28, opacity: 0.95, maxLen: 6, minLen: 1 },
+    { radius: 1.5, threshold: 7, grain: 0.2, opacity: 0.95, maxLen: 5, minLen: 1 },
+  ],
+  curvature: 0.8,
+  streak: 0.2,
+  wobble: 0.15,
+  toothShade: 7,
+  colorJitter: 2,
+  saturation: 1,
+  focus: 0,
+  wash: 0.3,
+  paper: { ...PAPER, shade: 6 },
+  contours: { ...pastel.contours, strength: 0.22, inkMix: 0.2 },
+  grade: { contrast: 0.02, warmth: 0, coolShadows: 0, vignette: 0, emboss: 0.02 },
+};
+
+export const PRESETS: Record<string, Preset> = { pastel, charcoal, gouache, impressionist, faithful };
 export type PresetName = keyof typeof PRESETS;

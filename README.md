@@ -21,6 +21,7 @@ npm install
 npm run paint -- --text "two fishing boats on a misty lake at dawn, mountains behind" out.png
 npm run paint -- scenes/temple-pond.ts out.png --medium charcoal     # a hand-written scene file
 npm run photo -- photo.jpg out.png --preset pastel                   # repaint a photo
+npm run photo -- photo.jpg out.png --preset faithful                 # close copy: fine strokes, true colours
 npm run build                                                         # rebuild docs/index.html
 ```
 
@@ -60,7 +61,8 @@ parser saved. Positions: `x` is a fraction of width, `y` of height; sizes are fr
 
 ## Media
 
-`pastel` (default), `charcoal`, `gouache`, `impressionist`. Each is a set of numbers in `src/presets.ts`:
+`pastel` (default), `charcoal`, `gouache`, `impressionist`, and `faithful` (a close copy of a reference photo: small brushes
+everywhere, no colour drift, no tint or vignette; roughly 3.5x lower pixel error than `pastel` on the same image). Each is a set of numbers in `src/presets.ts`:
 brush sizes per pass, how faithful each pass is, grain, streaks, taper, wobble, contours, hatching, grade.
 
 ## The object library
