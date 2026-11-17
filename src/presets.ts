@@ -37,6 +37,12 @@ export interface Preset {
   contours: { enabled: boolean; strength: number; width: number; lowP: number; highP: number; minLen: number; inkMix: number };
   hatching: { enabled: boolean; levels: number[]; angles: number[]; spacing: number; length: number; width: number; opacity: number };
   grade: { contrast: number; warmth: number; coolShadows: number; vignette: number; emboss: number };
+  /**
+   * Copy-the-reference mode. After the normal layers, keep adding finer passes until the painting reaches `target`
+   * similarity (0..1, the lower of pixel similarity and SSIM) or `passes` run out; if it is still short, a last pass
+   * of single-pixel dabs corrects what is left.
+   */
+  exact?: { target: number; passes: number };
 }
 
 const PAPER = { color: [244, 237, 224] as RGB, cell: 3, laidPeriod: 4.5, shade: 9 };
@@ -150,5 +156,37 @@ export const faithful: Preset = {
   grade: { contrast: 0.02, warmth: 0, coolShadows: 0, vignette: 0, emboss: 0.02 },
 };
 
-export const PRESETS: Record<string, Preset> = { pastel, charcoal, gouache, impressionist, faithful };
+/**
+ * Exact: reproduce the reference down to the last detail. Every paper and brush effect that would move a pixel away
+ * from the photo is switched off (grain, streaks, wobble, tint, vignette, contours), the brushes go down to a single
+ * pixel, and the painter measures itself against the reference, repainting until it hits the target.
+ */
+export const exact: Preset = {
+  ...pastel,
+  name: 'exact',
+  paper: { ...PAPER, shade: 0 },
+  layers: [
+    { radius: 24, threshold: 0, grain: 0, opacity: 1, maxLen: 8, minLen: 2 },
+    { radius: 11, threshold: 8, grain: 0, opacity: 1, maxLen: 8, minLen: 2 },
+    { radius: 5.5, threshold: 5, grain: 0, opacity: 1, maxLen: 7, minLen: 1 },
+    { radius: 2.8, threshold: 3.5, grain: 0, opacity: 1, maxLen: 6, minLen: 1 },
+    { radius: 1.6, threshold: 2.5, grain: 0, opacity: 1, maxLen: 5, minLen: 1 },
+    { radius: 1, threshold: 1.8, grain: 0, opacity: 1, maxLen: 4, minLen: 1 },
+  ],
+  blurFactor: 0.35,
+  curvature: 0.85,
+  taper: 0,
+  wobble: 0,
+  streak: 0,
+  toothShade: 0,
+  colorJitter: 0,
+  saturation: 1,
+  focus: 0,
+  wash: 0.5,
+  contours: { ...pastel.contours, enabled: false },
+  grade: { contrast: 0, warmth: 0, coolShadows: 0, vignette: 0, emboss: 0 },
+  exact: { target: 0.99, passes: 4 },
+};
+
+export const PRESETS: Record<string, Preset> = { pastel, charcoal, gouache, impressionist, faithful, exact };
 export type PresetName = keyof typeof PRESETS;

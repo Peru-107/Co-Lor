@@ -31,6 +31,7 @@ const res = await renderPainting(
   {
     preset,
     seed,
+    overrides: flag('target', '') ? { exact: { target: Number(flag('target', '0.99')), passes: Number(flag('passes', '4')) } } : undefined,
     onProgress: (stage) => {
       if (stage !== last) console.log(stage);
       last = stage;
@@ -39,3 +40,5 @@ const res = await renderPainting(
 );
 await sharp(Buffer.from(res.data.buffer), { raw: { width: res.width, height: res.height, channels: 4 } }).png().toFile(output);
 console.log(`${output}: ${res.width}x${res.height}, ${res.stats.strokes} paint strokes, ${res.stats.contourStrokes} contours, ${res.stats.hatchStrokes} hatches, ${(res.stats.ms / 1000).toFixed(1)}s`);
+const q = res.stats.quality;
+if (q) console.log(`match with reference: ${(q.similarity * 100).toFixed(2)}%  (SSIM ${q.ssim.toFixed(4)}, mean error ${q.mae.toFixed(2)}/255, PSNR ${q.psnr.toFixed(1)} dB, ${(q.within4 * 100).toFixed(1)}% of pixels within 4 levels)`);

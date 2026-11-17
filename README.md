@@ -22,6 +22,7 @@ npm run paint -- --text "two fishing boats on a misty lake at dawn, mountains be
 npm run paint -- scenes/temple-pond.ts out.png --medium charcoal     # a hand-written scene file
 npm run photo -- photo.jpg out.png --preset pastel                   # repaint a photo
 npm run photo -- photo.jpg out.png --preset faithful                 # close copy: fine strokes, true colours
+npm run photo -- photo.jpg out.png --preset exact [--target 0.995]   # reproduce the photo; prints how closely it matched
 npm run build                                                         # rebuild docs/index.html
 ```
 
@@ -62,7 +63,11 @@ parser saved. Positions: `x` is a fraction of width, `y` of height; sizes are fr
 ## Media
 
 `pastel` (default), `charcoal`, `gouache`, `impressionist`, and `faithful` (a close copy of a reference photo: small brushes
-everywhere, no colour drift, no tint or vignette; roughly 3.5x lower pixel error than `pastel` on the same image). Each is a set of numbers in `src/presets.ts`:
+everywhere, no colour drift, no tint or vignette; roughly 3.5x lower pixel error than `pastel` on the same image), and `exact`: every paper and brush effect that would move a
+pixel off the photo is switched off, brushes go down to 1 px, and the painter measures itself against the reference
+(`src/metrics.ts`: pixel error, PSNR, SSIM) and repaints until the match reaches the target (default 99%, defined as the
+lower of 1 - error/255 and SSIM). If strokes stall below the target, a last pass of single-pixel dabs finishes the job,
+so on very busy images (text, fine patterns) the result is a pixel-accurate copy built from strokes and dabs, not a loose painting. Each is a set of numbers in `src/presets.ts`:
 brush sizes per pass, how faithful each pass is, grain, streaks, taper, wobble, contours, hatching, grade.
 
 ## The object library

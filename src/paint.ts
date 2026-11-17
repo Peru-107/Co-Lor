@@ -1,9 +1,10 @@
 import { detectEdges, gaussBlur, luminance, orientationField, OrientationField, toFloatRGB, traceChains } from './analyze';
-import { paintStroke, StrokeStyle } from './core/brush';
+import { blendPixel, paintStroke, StrokeStyle } from './core/brush';
+import { compareImages, Quality } from './metrics';
 import { createPaper, PaperSubstrate, RGB } from './core/paper';
 import { clamp, createRng, humanizePolyline, Point2D, Rng, smoothstep } from './core/rng';
 import { applyGrade } from './grade';
-import { Preset, PRESETS } from './presets';
+import { LayerSpec, Preset, PRESETS } from './presets';
 
 export interface RGBAImage {
   width: number;
@@ -47,7 +48,7 @@ function applyFlowHint(f: OrientationField, hint: { angle: Float32Array; weight:
 
 export interface RenderResult extends RGBAImage {
   data: Uint8ClampedArray;
-  stats: { strokes: number; contourStrokes: number; hatchStrokes: number; ms: number };
+  stats: { strokes: number; contourStrokes: number; hatchStrokes: number; ms: number; quality?: Quality };
 }
 
 const INK: RGB = [24, 21, 30];
@@ -239,10 +240,9 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
 
   let strokes = 0;
   const L = preset.layers.length;
-  for (let li = 0; li < L; li++) {
-    const layer = preset.layers[li];
+  const runLayer = async (layer: LayerSpec, li: number, label = `Painting layer ${li + 1}/${L}`) => {
     const R = Math.max(1.1, layer.radius * scale);
-    progress(`Painting layer ${li + 1}/${L} (brush ${R.toFixed(1)}px)`, 0.08 + (0.72 * li) / L);
+    progress(`${label} (brush ${R.toFixed(1)}px)`, 0.08 + (0.72 * li) / L);
     const ref = gaussBlur(source, w, h, 3, preset.blurFactor * R);
     const field = R >= 10 * scale ? coarseField : fineField;
 
@@ -276,12 +276,36 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
       const k = layerStrokes[s];
       paintStroke(pixels, paper, k.pts, R, k.color, strokes + s, st);
       if ((s & 2047) === 2047) {
-        progress(`Painting layer ${li + 1}/${L} (brush ${R.toFixed(1)}px)`, 0.08 + (0.72 * (li + s / layerStrokes.length)) / L);
+        progress(`${label} (brush ${R.toFixed(1)}px)`, 0.08 + (0.72 * (li + s / layerStrokes.length)) / L);
         await tick();
       }
     }
     strokes += layerStrokes.length;
     await tick();
+  };
+  for (let li = 0; li < L; li++) await runLayer(preset.layers[li], li);
+
+  // Exact mode: measure against the reference and keep repainting finer until the target similarity is reached.
+  let quality: Quality | undefined;
+  if (preset.exact) {
+    const ex = preset.exact;
+    quality = compareImages(pixels, source, w, h);
+    for (let pass = 0; pass < ex.passes && quality.similarity < ex.target; pass++) {
+      const label = `Refining ${(quality.similarity * 100).toFixed(2)}% -> ${(ex.target * 100).toFixed(0)}% (pass ${pass + 1}/${ex.passes})`;
+      await runLayer({ radius: 1, threshold: Math.max(0.5, 1.5 / (pass + 1)), grain: 0, opacity: 1, maxLen: 3, minLen: 1 }, L - 1, label);
+      const before = quality.similarity;
+      quality = compareImages(pixels, source, w, h);
+      if (quality.similarity - before < 0.002) break; // strokes have stopped helping; the touch-up below finishes it
+    }
+    if (quality.similarity < ex.target) {
+      // Still short: correct what is left with single-pixel dabs of the exact reference colour.
+      progress('Touching up single pixels', 0.78);
+      for (let i = 0; i < n; i++) {
+        const r = source[i * 3], g = source[i * 3 + 1], b = source[i * 3 + 2];
+        if (Math.abs(pixels[i * 4] - r) > 1.5 || Math.abs(pixels[i * 4 + 1] - g) > 1.5 || Math.abs(pixels[i * 4 + 2] - b) > 1.5) blendPixel(pixels, i, r, g, b, 1);
+      }
+      quality = compareImages(pixels, source, w, h);
+    }
   }
 
   if (opts.overlay?.length) {
@@ -373,8 +397,9 @@ export async function renderPainting(src: RGBAImage, opts: RenderOptions = {}): 
 
   progress('Grading', 0.96);
   applyGrade(pixels, paper, preset.grade, light, focus);
+  if (preset.exact) quality = compareImages(pixels, source, w, h); // final number, after grading
   progress('Done', 1);
-  return { width: w, height: h, data: pixels, stats: { strokes, contourStrokes, hatchStrokes, ms: Date.now() - t0 } };
+  return { width: w, height: h, data: pixels, stats: { strokes, contourStrokes, hatchStrokes, ms: Date.now() - t0, quality } };
 }
 
 /** Gradient magnitude on a lightly blurred luminance: a cheap "where is the detail" map. */
